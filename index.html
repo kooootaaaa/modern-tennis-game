@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern Tennis Game</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            overflow: hidden;
+        }
+        
+        .game-container {
+            position: relative;
+            background: linear-gradient(145deg, #1e3c72, #2a5298);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3),
+                        0 0 0 1px rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        #gameCanvas {
+            background: linear-gradient(145deg, #0f2027, #203a43, #2c5364);
+            border: none;
+            border-radius: 15px;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5),
+                        0 0 0 2px rgba(255, 255, 255, 0.1);
+        }
+        
+        .score {
+            color: #ffffff;
+            font-size: 32px;
+            font-weight: 600;
+            position: absolute;
+            top: -15px;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .score.left {
+            left: 80px;
+        }
+        
+        .score.right {
+            right: 80px;
+        }
+        
+        .controls {
+            color: rgba(255, 255, 255, 0.9);
+            position: absolute;
+            bottom: -60px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            font-size: 14px;
+            font-weight: 400;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px 25px;
+            border-radius: 25px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .controls div {
+            margin: 5px 0;
+        }
+        
+        .game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-size: 42px;
+            font-weight: 700;
+            text-align: center;
+            background: linear-gradient(145deg, rgba(30, 60, 114, 0.95), rgba(42, 82, 152, 0.95));
+            padding: 40px 50px;
+            border-radius: 20px;
+            display: none;
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        
+        .game-over div:last-child {
+            font-size: 18px;
+            font-weight: 400;
+            margin-top: 15px;
+            opacity: 0.8;
+        }
+        
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.8);
+            }
+            to {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+        }
+        
+        .speed-indicator {
+            position: absolute;
+            top: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 14px;
+            font-weight: 500;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 8px 16px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="score left" id="leftScore">0</div>
+        <div class="score right" id="rightScore">0</div>
+        <div class="speed-indicator" id="speedIndicator">Speed: 0%</div>
+        <canvas id="gameCanvas" width="800" height="400"></canvas>
+        <div class="controls">
+            <div>🤖 AI vs 🎮 Player</div>
+            <div>右パドル: ↑/↓ キー | スペース: 開始/リスタート</div>
+        </div>
+        <div class="game-over" id="gameOver">
+            <div id="winnerText">AIの勝利!</div>
+            <div>スペースキーでリスタート</div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const leftScoreElement = document.getElementById('leftScore');
+        const rightScoreElement = document.getElementById('rightScore');
+        const gameOverElement = document.getElementById('gameOver');
+        const winnerTextElement = document.getElementById('winnerText');
+
+        const game = {
+            width: canvas.width,
+            height: canvas.height,
+            running: false,
+            gameOver: false
+        };
+
+        const ball = {
+            x: game.width / 2,
+            y: game.height / 2,
+            radius: 8,
+            velocityX: 10,
+            velocityY: 6,
+            speed: 10,
+            baseSpeed: 10,
+            speedIncrement: 0.5,
+            maxSpeed: 20
+        };
+
+        const leftPaddle = {
+            x: 20,
+            y: game.height / 2 - 50,
+            width: 15,
+            height: 100,
+            speed: 8
+        };
+
+        const rightPaddle = {
+            x: game.width - 35,
+            y: game.height / 2 - 50,
+            width: 15,
+            height: 100,
+            speed: 8
+        };
+
+        const score = {
+            left: 0,
+            right: 0,
+            winningScore: 5
+        };
+
+        const keys = {};
+
+        function drawRect(x, y, width, height, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x, y, width, height);
+        }
+
+        function drawCircle(x, y, radius, color) {
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawNet() {
+            ctx.setLineDash([8, 12]);
+            ctx.beginPath();
+            ctx.moveTo(game.width / 2, 0);
+            ctx.lineTo(game.width / 2, game.height);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+        
+        function drawPaddleWithGlow(x, y, width, height, color) {
+            // Glow effect
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 20;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+            
+            // Main paddle
+            ctx.fillStyle = color;
+            ctx.fillRect(x, y, width, height);
+            
+            // Inner highlight
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.fillRect(x + 2, y + 2, width - 4, height - 4);
+            
+            // Reset shadow
+            ctx.shadowColor = 'transparent';
+        }
+        
+        function drawBallWithGlow(x, y, radius, color) {
+            // Outer glow
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 30;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+            
+            // Main ball
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Inner glow
+            ctx.shadowBlur = 0;
+            const innerGradient = ctx.createRadialGradient(x - 2, y - 2, 0, x, y, radius);
+            innerGradient.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+            innerGradient.addColorStop(1, 'rgba(255, 255, 255, 0.1)');
+            ctx.fillStyle = innerGradient;
+            ctx.beginPath();
+            ctx.arc(x, y, radius - 1, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Reset shadow
+            ctx.shadowColor = 'transparent';
+        }
+        
+        function updateSpeedIndicator() {
+            const speedIndicator = document.getElementById('speedIndicator');
+            if (speedIndicator) {
+                const speedPercentage = Math.round(((ball.speed - ball.baseSpeed) / (ball.maxSpeed - ball.baseSpeed)) * 100);
+                speedIndicator.textContent = `Speed: ${speedPercentage}%`;
+            }
+        }
+
+        function render() {
+            // Clear canvas with gradient background
+            const gradient = ctx.createLinearGradient(0, 0, game.width, game.height);
+            gradient.addColorStop(0, '#0f2027');
+            gradient.addColorStop(0.5, '#203a43');
+            gradient.addColorStop(1, '#2c5364');
+            drawRect(0, 0, game.width, game.height, gradient);
+            
+            drawNet();
+            
+            // Draw paddles with glow effect
+            drawPaddleWithGlow(leftPaddle.x, leftPaddle.y, leftPaddle.width, leftPaddle.height, '#ff6b6b');
+            drawPaddleWithGlow(rightPaddle.x, rightPaddle.y, rightPaddle.width, rightPaddle.height, '#4ecdc4');
+            
+            // Draw ball with glow effect
+            drawBallWithGlow(ball.x, ball.y, ball.radius, '#ffffff');
+            
+            // Update speed indicator
+            updateSpeedIndicator();
+        }
+
+        function updatePaddles() {
+            // AI for left paddle
+            const ballCenterY = ball.y;
+            const leftPaddleCenterY = leftPaddle.y + leftPaddle.height / 2;
+            const diff = ballCenterY - leftPaddleCenterY;
+            
+            if (Math.abs(diff) > 10) {
+                if (diff > 0) {
+                    leftPaddle.y = Math.min(game.height - leftPaddle.height, leftPaddle.y + leftPaddle.speed * 0.8);
+                } else {
+                    leftPaddle.y = Math.max(0, leftPaddle.y - leftPaddle.speed * 0.8);
+                }
+            }
+            
+            // Player controls for right paddle
+            if (keys['ArrowUp']) {
+                rightPaddle.y = Math.max(0, rightPaddle.y - rightPaddle.speed);
+            }
+            if (keys['ArrowDown']) {
+                rightPaddle.y = Math.min(game.height - rightPaddle.height, rightPaddle.y + rightPaddle.speed);
+            }
+        }
+
+        function updateBall() {
+            ball.x += ball.velocityX;
+            ball.y += ball.velocityY;
+
+            if (ball.y + ball.radius > game.height || ball.y - ball.radius < 0) {
+                ball.velocityY = -ball.velocityY;
+            }
+
+            if (ball.x + ball.radius > rightPaddle.x && 
+                ball.x - ball.radius < rightPaddle.x + rightPaddle.width &&
+                ball.y + ball.radius > rightPaddle.y && 
+                ball.y - ball.radius < rightPaddle.y + rightPaddle.height) {
+                
+                ball.velocityX = -ball.velocityX;
+                let collidePoint = ball.y - (rightPaddle.y + rightPaddle.height / 2);
+                collidePoint = collidePoint / (rightPaddle.height / 2);
+                let angleRad = collidePoint * Math.PI / 4;
+                ball.velocityX = -ball.speed * Math.cos(angleRad);
+                ball.velocityY = ball.speed * Math.sin(angleRad);
+                
+                if (ball.speed < ball.maxSpeed) {
+                    ball.speed += ball.speedIncrement;
+                }
+            }
+
+            if (ball.x - ball.radius < leftPaddle.x + leftPaddle.width && 
+                ball.x + ball.radius > leftPaddle.x &&
+                ball.y + ball.radius > leftPaddle.y && 
+                ball.y - ball.radius < leftPaddle.y + leftPaddle.height) {
+                
+                ball.velocityX = -ball.velocityX;
+                let collidePoint = ball.y - (leftPaddle.y + leftPaddle.height / 2);
+                collidePoint = collidePoint / (leftPaddle.height / 2);
+                let angleRad = collidePoint * Math.PI / 4;
+                ball.velocityX = ball.speed * Math.cos(angleRad);
+                ball.velocityY = ball.speed * Math.sin(angleRad);
+                
+                if (ball.speed < ball.maxSpeed) {
+                    ball.speed += ball.speedIncrement;
+                }
+            }
+
+            if (ball.x < 0) {
+                score.right++;
+                rightScoreElement.textContent = score.right;
+                checkGameEnd();
+                resetBall();
+            }
+
+            if (ball.x > game.width) {
+                score.left++;
+                leftScoreElement.textContent = score.left;
+                checkGameEnd();
+                resetBall();
+            }
+        }
+
+        function checkGameEnd() {
+            if (score.left >= score.winningScore) {
+                game.gameOver = true;
+                game.running = false;
+                winnerTextElement.textContent = 'AIの勝利!';
+                gameOverElement.style.display = 'block';
+            } else if (score.right >= score.winningScore) {
+                game.gameOver = true;
+                game.running = false;
+                winnerTextElement.textContent = 'プレイヤーの勝利!';
+                gameOverElement.style.display = 'block';
+            }
+        }
+
+        function resetBall() {
+            ball.x = game.width / 2;
+            ball.y = game.height / 2;
+            ball.velocityX = ball.velocityX > 0 ? -ball.speed : ball.speed;
+            ball.velocityY = (Math.random() - 0.5) * 12;
+        }
+
+        function resetGame() {
+            score.left = 0;
+            score.right = 0;
+            leftScoreElement.textContent = '0';
+            rightScoreElement.textContent = '0';
+            game.gameOver = false;
+            gameOverElement.style.display = 'none';
+            ball.speed = ball.baseSpeed;
+            resetBall();
+        }
+
+        function gameLoop() {
+            if (game.running && !game.gameOver) {
+                updatePaddles();
+                updateBall();
+            }
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        document.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+            
+            if (e.key === ' ') {
+                e.preventDefault();
+                if (game.gameOver) {
+                    resetGame();
+                }
+                if (!game.running) {
+                    game.running = true;
+                }
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+        });
+
+        resetBall();
+        gameLoop();
+    </script>
+</body>
+</html>
